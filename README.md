@@ -20,3 +20,6 @@ Android Studio로 이 폴더를 열고 실행해. 명령줄로는:
 ## 사용한 것
 - [OkHttp](https://square.github.io/okhttp/) (Apache 2.0)
 - 아이콘 디자인: [Lucide](https://lucide.dev) (ISC 라이선스) — PC 프로그램에서 그려서 보냄
+
+## 라이선스
+MIT 라이선스 (`LICENSE`). 사용한 라이브러리는 위에 적은 각자의 라이선스를 따라.
