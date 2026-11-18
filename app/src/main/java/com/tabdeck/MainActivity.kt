@@ -37,6 +37,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -176,8 +178,22 @@ data class DeckButton(
     val color: Color, val text: Color,
     val mode: String,            // "image" = 이미지가 꽉 참, "glyph" = 가운데 아이콘, "none" = 글자만
     val icon: ImageBitmap?,
-    val shade: Color             // 그림자·빛 색 (버튼 색, 이미지면 이미지 평균색)
+    val shade: Color,            // 그림자·빛 색 (버튼 색, 이미지면 이미지 평균색)
+    val action: ActionInfo? = null   // 누르면 할 일 (꾹 누르면 보여 줌). 예전 PC 프로그램은 안 보내서 null
 )
+
+// PC가 보내는 '누르면 할 일' 요약
+data class ActionStep(val type: String, val text: String, val sub: String)   // type: run / url / key / wait
+data class ActionInfo(val kind: String, val gap: Double, val steps: List<ActionStep>)
+
+private fun parseAction(o: JSONObject?): ActionInfo? {
+    if (o == null) return null
+    val arr = o.optJSONArray("steps")
+    val steps = (0 until (arr?.length() ?: 0)).mapNotNull { i ->
+        arr!!.optJSONObject(i)?.let { ActionStep(it.optString("type"), it.optString("text").take(300), it.optString("sub").take(400)) }
+    }.take(50)
+    return ActionInfo(o.optString("kind").take(40), o.optDouble("gap", 0.0), steps)
+}
 
 // 색을 어둡게 (f < 1)
 private fun Color.dim(f: Float) = Color(red * f, green * f, blue * f, alpha)
@@ -497,7 +513,8 @@ class MainActivity : ComponentActivity() {
                                     o.getString("id"), o.getString("label"), color,
                                     parseColor(o.optString("text", "#1f2a44"), Ink),
                                     mode, icon,
-                                    if (mode == "image" && icon != null) averageColor(icon) else color
+                                    if (mode == "image" && icon != null) averageColor(icon) else color,
+                                    parseAction(o.optJSONObject("action"))
                                 )
                             }
                             runOnUiThread {
@@ -570,6 +587,7 @@ class MainActivity : ComponentActivity() {
             if (veil.intValue > 0) Box(Modifier.fillMaxSize().background(Bg.copy(alpha = if (veil.intValue == 1) 0.3f else 0.55f)))
         } else Backdrop(motion.intValue)
         if (adjusting.value && bgMode.value == "custom") { AdjustOverlay(prefs); return@Box }
+        var infoFor by remember { mutableStateOf<DeckButton?>(null) }    // 꾹 눌러서 '누르면 할 일'을 보는 버튼
         Column(
             Modifier.fillMaxSize()
                 .statusBarsPadding().navigationBarsPadding()
@@ -611,11 +629,130 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.weight(1f)
                 ) {
                     items(buttons, key = { it.id }) { b ->
-                        DeckTile(b, results[b.id]) { press(b.id) }
+                        DeckTile(b, results[b.id], onLongPress = { infoFor = b }) { press(b.id) }
                     }
                 }
             }
         }
+        // 꾹 누르면: 이 버튼에 들어 있는 '누르면 할 일' 카드
+        AnimatedVisibility(infoFor != null, enter = fadeIn(tween(160)), exit = fadeOut(tween(140))) {
+            // 사라지는 동안에도 내용이 보이게 마지막 버튼을 기억
+            var last by remember { mutableStateOf<DeckButton?>(null) }
+            infoFor?.let { last = it }
+            last?.let { b ->
+                ActionCard(
+                    buttons.firstOrNull { it.id == b.id } ?: b,
+                    onClose = { infoFor = null },
+                    onRun = { press(b.id); infoFor = null }
+                )
+            }
+        }
+        if (infoFor != null) BackHandler { infoFor = null }
+        }
+    }
+
+    // ───────────── 버튼 꾹 누르기: 누르면 할 일 보기 ─────────────
+    @Composable
+    fun ActionCard(b: DeckButton, onClose: () -> Unit, onRun: () -> Unit) {
+        val shape = RoundedCornerShape(26.dp)
+        Box(
+            Modifier.fillMaxSize().background(Ink.copy(alpha = 0.38f))
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClose() }
+                .statusBarsPadding().navigationBarsPadding().padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                Modifier.widthIn(max = 460.dp).fillMaxWidth()
+                    .shadow(18.dp, shape, ambientColor = b.shade, spotColor = b.shade)
+                    .clip(shape).background(CardC)
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { }   // 카드 안을 눌러도 안 닫힘
+                    .padding(20.dp)
+            ) {
+                // 위: 버튼 미리보기 + 이름 + 종류
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier.size(56.dp).clip(RoundedCornerShape(16.dp)).background(b.color),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when {
+                            b.mode == "image" && b.icon != null ->
+                                Image(b.icon, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                            b.mode == "glyph" && b.icon != null ->
+                                Image(b.icon, null, modifier = Modifier.size(30.dp))
+                            else -> Text(b.label.take(2), color = b.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+                    }
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(b.label, color = Ink, fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Spacer(Modifier.height(4.dp))
+                        val kind = b.action?.kind?.takeIf { it.isNotBlank() } ?: "누르면 할 일"
+                        Text(kind, color = MintD, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(MintL)
+                                .padding(horizontal = 10.dp, vertical = 4.dp))
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Line))
+                Spacer(Modifier.height(12.dp))
+                // 가운데: 할 일 목록 (그룹이면 차례대로)
+                val a = b.action
+                Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
+                    when {
+                        a == null -> Text("PC 프로그램을 0.1.3 이상으로 업데이트하면 여기에 이 버튼의 할 일이 보여.",
+                            color = Sub, fontSize = 14.sp)
+                        a.steps.isEmpty() -> Text("아직 할 일이 정해지지 않았어. PC 프로그램에서 정해 줘.",
+                            color = Sub, fontSize = 14.sp)
+                        else -> a.steps.forEachIndexed { i, st ->
+                            // 할 일이 하나면 위 이름표와 같은 설명은 한 번만
+                            StepRow(i, if (a.steps.size == 1 && st.sub == a.kind) st.copy(sub = "") else st,
+                                numbered = a.steps.size > 1)
+                        }
+                    }
+                }
+                if (a != null && a.steps.size > 1 && a.gap > 0) {
+                    Text("하나 열고 다음까지 ${"%.1f".format(a.gap).removeSuffix(".0")}초 간격",
+                        color = Sub, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                }
+                Spacer(Modifier.height(18.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("꾹 누르면 이 화면이 열려", color = Sub, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                    Text("닫기", color = Ink, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clip(RoundedCornerShape(14.dp)).clickable { onClose() }
+                            .padding(horizontal = 14.dp, vertical = 12.dp))
+                    Spacer(Modifier.width(6.dp))
+                    PillButton("바로 실행") { onRun() }
+                }
+            }
+        }
+    }
+
+    @Composable
+    fun StepRow(i: Int, st: ActionStep, numbered: Boolean) {
+        val (mark, tint) = when (st.type) {
+            "url" -> "🌐" to Color(0xFFDCEBFA)
+            "key" -> "⌨" to Color(0xFFEDE6FA)
+            "wait" -> "⏱" to Color(0xFFFBF0DA)
+            else -> "▶" to MintL
+        }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (numbered) {
+                Text("${i + 1}", color = Sub, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center, modifier = Modifier.width(18.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Box(Modifier.size(34.dp).clip(CircleShape).background(tint), contentAlignment = Alignment.Center) {
+                Text(mark, fontSize = 15.sp, color = Ink)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(st.text, color = Ink, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (st.sub.isNotBlank()) {
+                    Text(st.sub, color = Sub, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
         }
     }
 
@@ -955,7 +1092,7 @@ class MainActivity : ComponentActivity() {
 
     // ───────────── 버튼 한 칸: 눌리고, 효과가 터지고, 체크/흔들림으로 결과 표시 ─────────────
     @Composable
-    fun DeckTile(b: DeckButton, result: Pair<Boolean, Long>?, onPress: () -> Unit) {
+    fun DeckTile(b: DeckButton, result: Pair<Boolean, Long>?, onLongPress: () -> Unit = {}, onPress: () -> Unit) {
         val view = LocalView.current
         val src = remember { MutableInteractionSource() }
         val pressed by src.collectIsPressedAsState()
@@ -1021,7 +1158,15 @@ class MainActivity : ComponentActivity() {
                 .clip(shape)
                 .background(face)
                 .border(1.dp, edge, shape)
-                .clickable(interactionSource = src, indication = if (effect == "ripple") ripple(color = Mint) else null) {
+                .combinedClickable(
+                    interactionSource = src,
+                    indication = if (effect == "ripple") ripple(color = Mint) else null,
+                    onLongClick = {
+                        // 꾹 누르면 실행하지 않고 '누르면 할 일'만 보여 줌
+                        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        onLongPress()
+                    }
+                ) {
                     view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                     onPress()
                 }
