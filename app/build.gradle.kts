@@ -21,8 +21,8 @@ android {
         applicationId = "com.tabdeck"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2          // 새로 배포할 때마다 1씩 올림 (폰이 업데이트로 인식)
-        versionName = "0.1.1"    // 사람이 보는 버전 (PC 프로그램과 맞춤)
+        versionCode = 3          // 새로 배포할 때마다 1씩 올림 (폰이 업데이트로 인식)
+        versionName = "0.1.2"    // 사람이 보는 버전 (PC 프로그램과 맞춤)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
