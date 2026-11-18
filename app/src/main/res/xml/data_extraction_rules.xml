@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 이상 백업·기기 이전 규칙: 비밀 키가 들어 있는 설정(deck.xml)은 클라우드 백업과 새 폰 이전에서 모두 뺌 -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="deck.xml" />
+        <!-- 내 배경 파일은 클 수 있어서 클라우드 백업에서 뺌 (새 폰 이전은 허용) -->
+        <exclude domain="file" path="bg_custom" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="deck.xml" />
+    </device-transfer>
+</data-extraction-rules>

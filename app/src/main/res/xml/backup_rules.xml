@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 이하 백업 규칙: 비밀 키가 들어 있는 설정(deck.xml)은 백업하지 않음 -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="deck.xml" />
+    <!-- 내 배경 파일은 클 수 있어서 (백업 한도를 넘으면 백업 전체가 멈춤) 백업하지 않음 -->
+    <exclude domain="file" path="bg_custom" />
+</full-backup-content>
