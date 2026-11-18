@@ -73,6 +73,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineBreak
 import kotlinx.coroutines.*
 import okhttp3.*
 import org.json.JSONObject
@@ -1036,29 +1041,31 @@ class MainActivity : ComponentActivity() {
                     Image(b.icon!!, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
                     Box(Modifier.fillMaxSize().background(
                         Brush.verticalGradient(0.45f to Color.Transparent, 1f to Color(0xAA0F1626))))
-                    Text(b.label, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.align(Alignment.BottomStart).padding(12.dp))
+                    FitLabel(b.label, Color.White, 14f, 10f, 2, TextAlign.Start,
+                        Modifier.align(Alignment.BottomStart).fillMaxWidth().padding(12.dp))
                 }
-                "glyph" -> Column(
-                    Modifier.fillMaxSize().padding(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    // 아이콘 뒤에 은은한 원
-                    Box(
-                        Modifier.fillMaxWidth(0.52f).aspectRatio(1f).clip(CircleShape)
-                            .background(b.text.copy(alpha = if (light) 0.08f else 0.14f)),
-                        contentAlignment = Alignment.Center
+                "glyph" -> BoxWithConstraints(Modifier.fillMaxSize().padding(10.dp)) {
+                    val iconMax = maxWidth * 0.52f
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Image(b.icon!!, null, modifier = Modifier.fillMaxWidth(0.72f).aspectRatio(1f))
+                        // 아이콘 뒤에 은은한 원 (이름이 두 줄이 되면 남는 자리에 맞춰 살짝 작아짐)
+                        Box(
+                            Modifier.weight(1f, fill = false).sizeIn(maxWidth = iconMax, maxHeight = iconMax)
+                                .aspectRatio(1f, matchHeightConstraintsFirst = true).clip(CircleShape)
+                                .background(b.text.copy(alpha = if (light) 0.08f else 0.14f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(b.icon!!, null, modifier = Modifier.fillMaxWidth(0.72f).aspectRatio(1f))
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        FitLabel(b.label, b.text, 14f, 10f, 2, TextAlign.Center, Modifier.fillMaxWidth())
                     }
-                    Spacer(Modifier.height(8.dp))
-                    Text(b.label, color = b.text, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                else -> Text(b.label, color = b.text, fontWeight = FontWeight.Bold, fontSize = 16.sp,
-                    textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center).padding(10.dp))
+                else -> FitLabel(b.label, b.text, 16f, 10f, 3, TextAlign.Center,
+                    Modifier.align(Alignment.Center).fillMaxWidth().padding(10.dp))
             }
 
             // 실패하면 붉은빛이 돌았다가 사라짐
@@ -1079,6 +1086,23 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // 긴 버튼 이름: 두 줄(글자만 버튼은 세 줄)까지 → 그래도 넘치면 글자를 조금씩 줄임 → 가장 작게도 안 되면 끝을 …로
+    @Composable
+    fun FitLabel(text: String, color: Color, maxSp: Float, minSp: Float, lines: Int, align: TextAlign, modifier: Modifier) {
+        BasicText(
+            keepKoreanWords(text), modifier,
+            style = TextStyle(color = color, fontWeight = FontWeight.Bold, textAlign = align, lineHeight = 1.2.em,
+                lineBreak = LineBreak.Heading),       // 줄 길이를 고르게 (한 줄만 길고 한 줄은 짧은 모양 방지)
+            maxLines = lines,
+            overflow = TextOverflow.Ellipsis,
+            autoSize = TextAutoSize.StepBased(minFontSize = minSp.sp, maxFontSize = maxSp.sp, stepSize = 0.5.sp)
+        )
+    }
+
+    // 한글 글자 사이에 보이지 않는 '끊지 마' 표시(U+2060)를 넣어서 띄어쓰기에서만 줄이 바뀌게
+    // (안드로이드 기본 줄바꿈은 한국어를 글자 중간에서 끊음. 한 단어가 한 줄보다 길면 그때만 중간에서 끊김)
+    private fun keepKoreanWords(s: String) = s.replace(Regex("(?<=[가-힣])(?=[가-힣])"), "\u2060")
 
     // 두 색 사이 (t = 0이면 a, 1이면 b)
     private fun lerpColor(a: Color, b: Color, t: Float) =
