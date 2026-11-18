@@ -18,3 +18,9 @@ local.properties
 .kotlin/
 # 연결했던 기기 일련번호가 들어갈 수 있음
 /.idea/deploymentTargetSelector.xml
+
+# 서명 키 비밀번호·키 파일 (절대 올리지 않음)
+keystore.properties
+*.jks
+*.keystore
+/release/
